@@ -163,7 +163,7 @@ local function startGodMode()
                 if hum and hum.Health < hum.MaxHealth then
                     local needed = hum.MaxHealth - hum.Health
                     pcall(function()
-                        ReplicatedStorage:WaitForChild("TakeDamage"):FireServer(-needed, "Weeping")
+                        ReplicatedStorage:WaitForChild("TakeDamage"):FireServer(-needed)
                     end)
                 end
             end
