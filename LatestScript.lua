@@ -852,7 +852,7 @@ healBtn.MouseButton1Click:Connect(function()
     local v = tonumber(healInput.Text) or damageValue
     damageValue = v
     pcall(function()
-        ReplicatedStorage:WaitForChild("TakeDamage"):FireServer(-damageValue, "Weeping")
+        ReplicatedStorage:WaitForChild("TakeDamage"):FireServer(-damageValue)
     end)
 end)
 
