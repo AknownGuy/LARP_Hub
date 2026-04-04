@@ -2,7 +2,7 @@
 
 local GITHUB_USER   = "AknownGuy"
 local GITHUB_REPO   = "jones_code"
-local GITHUB_BRANCH = "main"
+local GITHUB_BRANCH = "master"
 local SCRIPT_FILE   = "LatestScript.lua" -- exact repo-relative path, case-sensitive
 local GITHUB_TOKEN  = nil -- only set this if the repo is private
 
