@@ -8,6 +8,11 @@ Latest Script code :
 loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/master/LatestScript.lua"))()
 ```
 
+Use this launcher to see or run different versions to this script:
+```
+loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/master/Launcher"))()
+```
+
 ---
 
 ### Includes the following (In the most stable Script) :
