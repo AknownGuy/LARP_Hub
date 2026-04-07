@@ -1,4 +1,4 @@
--- tools
+-- # tools
 -- https://github.com/78n/SimpleSpy 50/50 this breaks but it's a beta for a reason!
 
 if getgenv().SimpleSpyExecuted and type(getgenv().SimpleSpyShutdown) == "function" then
