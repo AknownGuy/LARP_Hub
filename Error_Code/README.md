@@ -5,12 +5,7 @@ This Script is intented for [Error_Code](https://www.roblox.com/games/9974033938
 
 Latest Script code :
 ```
-loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/master/LatestScript.lua"))()
-```
-
-Use this launcher to see or run different versions to this script:
-```
-loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/jones_code/master/Launcher"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/AknownGuy/LARP_Hub/master/Error_Code.lua"))()
 ```
 
 ---
