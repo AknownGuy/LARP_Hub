@@ -1,0 +1,713 @@
+-- ============================================================
+--  LARP SYSTEM - Rayfield UI
+--  Place this LocalScript inside StarterPlayerScripts
+-- ============================================================
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid    = Character:WaitForChild("Humanoid")
+
+-- ── Load Rayfield ────────────────────────────────────────────
+local Rayfield = loadstring(
+    game:HttpGet("https://sirius.menu/rayfield")
+)()
+
+-- ============================================================
+--  LARP DATA
+-- ============================================================
+
+local Classes = {
+    Warrior = {
+        icon      = "⚔️",
+        color     = Color3.fromRGB(200, 60,  60),
+        hp        = 150,
+        mana      = 40,
+        stamina   = 120,
+        walkSpeed = 16,
+        abilities = {"Shield Bash", "Battle Cry", "Parry", "Cleave"},
+        desc      = "A seasoned frontline fighter clad in heavy armour.",
+    },
+    Mage = {
+        icon      = "🔮",
+        color     = Color3.fromRGB(100, 80,  210),
+        hp        = 80,
+        mana      = 200,
+        stamina   = 60,
+        walkSpeed = 14,
+        abilities = {"Fireball", "Frost Nova", "Arcane Missile", "Blink"},
+        desc      = "A scholar of the arcane arts, wielding devastating spells.",
+    },
+    Rogue = {
+        icon      = "🗡️",
+        color     = Color3.fromRGB(60,  180, 80),
+        hp        = 100,
+        mana      = 60,
+        stamina   = 140,
+        walkSpeed = 20,
+        abilities = {"Backstab", "Smoke Bomb", "Vanish", "Poison Blade"},
+        desc      = "A nimble shadow-walker who strikes from the darkness.",
+    },
+    Paladin = {
+        icon      = "🛡️",
+        color     = Color3.fromRGB(220, 190, 60),
+        hp        = 130,
+        mana      = 100,
+        stamina   = 100,
+        walkSpeed = 15,
+        abilities = {"Holy Strike", "Lay on Hands", "Divine Shield", "Consecrate"},
+        desc      = "A holy warrior blessed with healing and divine might.",
+    },
+    Ranger = {
+        icon      = "🏹",
+        color     = Color3.fromRGB(80,  160, 200),
+        hp        = 110,
+        mana      = 80,
+        stamina   = 130,
+        walkSpeed = 18,
+        abilities = {"Rapid Shot", "Track Prey", "Camouflage", "Eagle Eye"},
+        desc      = "A swift archer attuned to nature and precision.",
+    },
+}
+
+local Emotes = {
+    "Wave", "Bow", "Cheer", "Sit",
+    "Point", "Salute", "Kneel", "Laugh",
+    "Shrug", "Clap",
+}
+
+local QuestLog = {
+    { name = "The Lost Sword",     status = "Active",    desc = "Find the blade lost in the Whispering Woods." },
+    { name = "Dragon's Hoard",     status = "Active",    desc = "Retrieve three golden coins from the cave." },
+    { name = "Village Healer",     status = "Completed", desc = "Deliver medicine to the sick elder." },
+    { name = "Bandit Bounty",      status = "Active",    desc = "Defeat five bandits on the King's Road." },
+    { name = "The Ancient Scroll", status = "Failed",    desc = "The scroll crumbled before you could read it." },
+}
+
+local Inventory = {
+    { name = "Health Potion",   qty = 3,  icon = "🧪" },
+    { name = "Mana Crystal",    qty = 2,  icon = "💎" },
+    { name = "Iron Sword",      qty = 1,  icon = "⚔️"  },
+    { name = "Leather Boots",   qty = 1,  icon = "👢" },
+    { name = "Bread Ration",    qty = 5,  icon = "🍞" },
+    { name = "Torch",           qty = 2,  icon = "🔦" },
+    { name = "Lockpick",        qty = 4,  icon = "🗝️" },
+    { name = "Enchanted Cloak", qty = 1,  icon = "🧣" },
+}
+
+-- ============================================================
+--  STATE
+-- ============================================================
+
+local State = {
+    class     = nil,
+    hp        = 100,
+    maxHp     = 100,
+    mana      = 100,
+    maxMana   = 100,
+    stamina   = 100,
+    maxStamina= 100,
+    level     = 1,
+    xp        = 0,
+    xpNeeded  = 100,
+    gold      = 250,
+    inCombat  = false,
+    title     = "Wanderer",
+    roleplaying = false,
+}
+
+-- ============================================================
+--  HELPERS
+-- ============================================================
+
+local function notify(title, content, duration, image)
+    Rayfield:Notify({
+        Title    = title,
+        Content  = content,
+        Duration = duration or 4,
+        Image    = image or 4483362458,
+    })
+end
+
+local function applyClass(className)
+    local data = Classes[className]
+    if not data then return end
+    State.class      = className
+    State.maxHp      = data.hp
+    State.hp         = data.hp
+    State.maxMana    = data.mana
+    State.mana       = data.mana
+    State.maxStamina = data.stamina
+    State.stamina    = data.stamina
+
+    if Humanoid then
+        Humanoid.MaxHealth = data.hp
+        Humanoid.Health    = data.hp
+        Humanoid.WalkSpeed = data.walkSpeed
+    end
+
+    notify(
+        "⚔️  Class Selected",
+        string.format("You are now a %s %s!\n%s", data.icon, className, data.desc),
+        6
+    )
+end
+
+local function gainXP(amount)
+    State.xp = State.xp + amount
+    if State.xp >= State.xpNeeded then
+        State.xp       = State.xp - State.xpNeeded
+        State.level    = State.level + 1
+        State.xpNeeded = math.floor(State.xpNeeded * 1.4)
+        notify("✨ Level Up!", "You reached Level " .. State.level .. "!", 5)
+    end
+end
+
+local function useAbility(name)
+    if not State.class then
+        notify("❌ No Class", "Select a class first!", 3)
+        return
+    end
+    local manaCost    = math.random(10, 25)
+    local staminaCost = math.random(5, 15)
+    if State.mana < manaCost then
+        notify("💧 Out of Mana", "Not enough mana to cast " .. name, 3)
+        return
+    end
+    if State.stamina < staminaCost then
+        notify("😓 Exhausted", "Not enough stamina to use " .. name, 3)
+        return
+    end
+    State.mana    = math.max(0, State.mana    - manaCost)
+    State.stamina = math.max(0, State.stamina - staminaCost)
+    local damage = math.random(15, 60)
+    gainXP(math.random(5, 15))
+    notify(
+        "⚡ " .. name,
+        string.format("You used %s!\nDealt %d damage  |  -%d Mana  |  -%d Stamina",
+            name, damage, manaCost, staminaCost),
+        4
+    )
+end
+
+local function doEmote(emoteName)
+    if Humanoid and Humanoid.Parent then
+        local anim = Instance.new("Animation")
+        -- Placeholder AnimationId (replace with your own asset IDs)
+        local ids = {
+            Wave    = "rbxassetid://507770239",
+            Bow     = "rbxassetid://507770680",
+            Cheer   = "rbxassetid://507770677",
+            Sit     = "rbxassetid://2506281703",
+            Point   = "rbxassetid://507770453",
+            Salute  = "rbxassetid://3360692915",
+            Kneel   = "rbxassetid://507770070",
+            Laugh   = "rbxassetid://507770818",
+            Shrug   = "rbxassetid://3360692915",
+            Clap    = "rbxassetid://507770239",
+        }
+        anim.AnimationId = ids[emoteName] or "rbxassetid://507770239"
+        local track = Humanoid:LoadAnimation(anim)
+        track:Play()
+        notify("🎭 Emote", emoteName, 2)
+    end
+end
+
+-- ============================================================
+--  BUILD RAYFIELD WINDOW
+-- ============================================================
+
+local Window = Rayfield:CreateWindow({
+    Name            = "⚔️  LARP System",
+    LoadingTitle    = "LARP System",
+    LoadingSubtitle = "Awakening your destiny...",
+    Theme           = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings   = false,
+    ConfigurationSaving = {
+        Enabled  = true,
+        FolderName = "LARPSystem",
+        FileName   = "Config",
+    },
+    KeySystem = false,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║         TAB: CHARACTER           ║
+-- ╚══════════════════════════════════╝
+
+local CharTab = Window:CreateTab("Character", 4483362458)
+
+CharTab:CreateSection("⚔️  Choose Your Class")
+
+for className, data in pairs(Classes) do
+    CharTab:CreateButton({
+        Name        = data.icon .. "  " .. className,
+        Description = data.desc,
+        Callback    = function()
+            applyClass(className)
+        end,
+    })
+end
+
+CharTab:CreateSection("📛  Identity")
+
+CharTab:CreateInput({
+    Name        = "Character Name",
+    Description = "Set your LARP character's name",
+    PlaceholderText = "Enter name...",
+    RemoveTextAfterFocusLost = false,
+    Callback    = function(value)
+        if value ~= "" then
+            LocalPlayer.DisplayName = value  -- cosmetic only
+            notify("📛 Name Set", "You are now known as: " .. value, 4)
+        end
+    end,
+})
+
+CharTab:CreateInput({
+    Name        = "Title / Rank",
+    Description = "e.g. Knight, Archmage, Shadow Hand",
+    PlaceholderText = "Enter title...",
+    RemoveTextAfterFocusLost = false,
+    Callback    = function(value)
+        if value ~= "" then
+            State.title = value
+            notify("📜 Title Set", "Your title is now: " .. value, 3)
+        end
+    end,
+})
+
+CharTab:CreateSection("🗺️  Backstory")
+
+CharTab:CreateInput({
+    Name        = "Backstory",
+    Description = "Write a short backstory for your character",
+    PlaceholderText = "I was born in a small village...",
+    RemoveTextAfterFocusLost = false,
+    Callback    = function(value)
+        if value ~= "" then
+            notify("📖 Backstory Saved", "Your tale has been recorded.", 3)
+        end
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║           TAB: STATS             ║
+-- ╚══════════════════════════════════╝
+
+local StatsTab = Window:CreateTab("Stats", 4483362458)
+
+StatsTab:CreateSection("📊  Combat Stats")
+
+local hpBar = StatsTab:CreateSlider({
+    Name    = "❤️  Health",
+    Range   = {0, 200},
+    Increment = 1,
+    CurrentValue = State.hp,
+    Flag    = "HP",
+    Callback = function(value)
+        State.hp = value
+        if Humanoid then Humanoid.Health = value end
+    end,
+})
+
+local manaBar = StatsTab:CreateSlider({
+    Name    = "💧  Mana",
+    Range   = {0, 200},
+    Increment = 1,
+    CurrentValue = State.mana,
+    Flag    = "Mana",
+    Callback = function(value)
+        State.mana = value
+    end,
+})
+
+local staminaBar = StatsTab:CreateSlider({
+    Name    = "⚡  Stamina",
+    Range   = {0, 200},
+    Increment = 1,
+    CurrentValue = State.stamina,
+    Flag    = "Stamina",
+    Callback = function(value)
+        State.stamina = value
+    end,
+})
+
+StatsTab:CreateSection("📈  Progression")
+
+StatsTab:CreateButton({
+    Name        = "🌟  Gain 25 XP",
+    Description = "Practice your skills and earn experience",
+    Callback    = function()
+        gainXP(25)
+        notify("📈 XP Gained", "+25 XP  |  Total: " .. State.xp .. " / " .. State.xpNeeded, 3)
+    end,
+})
+
+StatsTab:CreateButton({
+    Name        = "💰  Earn 50 Gold",
+    Description = "Complete a trade or loot a chest",
+    Callback    = function()
+        State.gold = State.gold + 50
+        notify("💰 Gold Earned", "+50 Gold  |  Total: " .. State.gold .. " Gold", 3)
+    end,
+})
+
+StatsTab:CreateButton({
+    Name        = "🧪  Restore All Stats",
+    Description = "Use a campfire to rest and recover",
+    Callback    = function()
+        State.hp      = State.maxHp
+        State.mana    = State.maxMana
+        State.stamina = State.maxStamina
+        if Humanoid then Humanoid.Health = Humanoid.MaxHealth end
+        notify("🏕️  Rested", "All stats fully restored!", 4)
+    end,
+})
+
+StatsTab:CreateSection("⚙️  Walk Speed")
+
+StatsTab:CreateSlider({
+    Name      = "🏃  Walk Speed",
+    Range     = {8, 32},
+    Increment = 1,
+    CurrentValue = 16,
+    Flag      = "WalkSpeed",
+    Callback  = function(value)
+        if Humanoid then Humanoid.WalkSpeed = value end
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║         TAB: ABILITIES           ║
+-- ╚══════════════════════════════════╝
+
+local AbilTab = Window:CreateTab("Abilities", 4483362458)
+
+AbilTab:CreateSection("🔥  Class Abilities")
+
+AbilTab:CreateButton({
+    Name        = "📋  Show My Abilities",
+    Description = "List all abilities for your current class",
+    Callback    = function()
+        if not State.class then
+            notify("❌ No Class", "Select a class from the Character tab first.", 4)
+            return
+        end
+        local data = Classes[State.class]
+        local list = table.concat(data.abilities, "\n  • ")
+        notify(
+            data.icon .. "  " .. State.class .. " Abilities",
+            "  • " .. list,
+            8
+        )
+    end,
+})
+
+-- Generic ability buttons (all classes)
+local allAbilities = {
+    { name = "Shield Bash",    icon = "🛡️" },
+    { name = "Fireball",       icon = "🔥" },
+    { name = "Backstab",       icon = "🗡️" },
+    { name = "Holy Strike",    icon = "✨" },
+    { name = "Rapid Shot",     icon = "🏹" },
+    { name = "Battle Cry",     icon = "📯" },
+    { name = "Frost Nova",     icon = "❄️" },
+    { name = "Smoke Bomb",     icon = "💨" },
+    { name = "Lay on Hands",   icon = "🙏" },
+    { name = "Eagle Eye",      icon = "👁️" },
+    { name = "Blink",          icon = "⚡" },
+    { name = "Consecrate",     icon = "🌟" },
+}
+
+AbilTab:CreateSection("⚡  Use an Ability")
+
+for _, ab in ipairs(allAbilities) do
+    AbilTab:CreateButton({
+        Name     = ab.icon .. "  " .. ab.name,
+        Callback = function()
+            useAbility(ab.name)
+        end,
+    })
+end
+
+AbilTab:CreateSection("🎯  Combat Mode")
+
+AbilTab:CreateToggle({
+    Name        = "⚔️  Combat Stance",
+    Description = "Enable combat stance for quicker reactions",
+    CurrentValue = false,
+    Flag        = "CombatStance",
+    Callback    = function(value)
+        State.inCombat = value
+        if value then
+            if Humanoid then Humanoid.WalkSpeed = (Humanoid.WalkSpeed + 4) end
+            notify("⚔️  Combat!", "You enter a combat stance!", 3)
+        else
+            if Humanoid then Humanoid.WalkSpeed = math.max(8, Humanoid.WalkSpeed - 4) end
+            notify("🕊️  At Ease", "You stand down.", 3)
+        end
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║          TAB: ROLEPLAY           ║
+-- ╚══════════════════════════════════╝
+
+local RPTab = Window:CreateTab("Roleplay", 4483362458)
+
+RPTab:CreateSection("🎭  Emotes")
+
+for _, emote in ipairs(Emotes) do
+    RPTab:CreateButton({
+        Name     = "🎭  " .. emote,
+        Callback = function()
+            doEmote(emote)
+        end,
+    })
+end
+
+RPTab:CreateSection("💬  RP Chat")
+
+RPTab:CreateInput({
+    Name            = "📣  /me Action",
+    Description     = "Describe your character's action",
+    PlaceholderText = "draws their sword slowly...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(value)
+        if value ~= "" then
+            local msg = string.format("*%s %s*", LocalPlayer.Name, value)
+            -- In a real game, fire a RemoteEvent here instead
+            notify("💬 RP Action", msg, 5)
+        end
+    end,
+})
+
+RPTab:CreateInput({
+    Name            = "📜  /say In-Character",
+    Description     = "Speak as your character",
+    PlaceholderText = "Hail, traveller! State your business.",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(value)
+        if value ~= "" then
+            notify("🗣️  " .. LocalPlayer.Name, '"' .. value .. '"', 5)
+        end
+    end,
+})
+
+RPTab:CreateSection("⚙️  RP Settings")
+
+RPTab:CreateToggle({
+    Name        = "🎭  RP Mode",
+    Description = "Mark yourself as actively roleplaying",
+    CurrentValue = false,
+    Flag        = "RPMode",
+    Callback    = function(value)
+        State.roleplaying = value
+        notify(
+            value and "🎭 RP Mode ON" or "🎭 RP Mode OFF",
+            value and "You are now in character." or "You have stepped out of character.",
+            3
+        )
+    end,
+})
+
+RPTab:CreateToggle({
+    Name        = "🌙  Roleplay Nametag",
+    Description = "Show your class & title above your head",
+    CurrentValue = false,
+    Flag        = "RPNametag",
+    Callback    = function(value)
+        -- Implement BillboardGui nametag here if desired
+        notify(
+            value and "🏷️ Nametag Enabled" or "🏷️ Nametag Disabled",
+            value and "Your class title is now visible." or "Nametag hidden.",
+            3
+        )
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║         TAB: INVENTORY           ║
+-- ╚══════════════════════════════════╝
+
+local InvTab = Window:CreateTab("Inventory", 4483362458)
+
+InvTab:CreateSection("🎒  Your Items")
+
+for _, item in ipairs(Inventory) do
+    InvTab:CreateButton({
+        Name        = item.icon .. "  " .. item.name,
+        Description = "Quantity: " .. item.qty,
+        Callback    = function()
+            if item.qty <= 0 then
+                notify("❌ Empty", "You have no " .. item.name .. " left.", 3)
+                return
+            end
+            item.qty = item.qty - 1
+            if item.name == "Health Potion" then
+                State.hp = math.min(State.maxHp, State.hp + 40)
+                if Humanoid then Humanoid.Health = State.hp end
+                notify("🧪 Potion Used", "Restored 40 HP!  Remaining: " .. item.qty, 4)
+            elseif item.name == "Mana Crystal" then
+                State.mana = math.min(State.maxMana, State.mana + 50)
+                notify("💎 Crystal Used", "Restored 50 Mana!  Remaining: " .. item.qty, 4)
+            else
+                notify(item.icon .. "  " .. item.name, "Used x1.  Remaining: " .. item.qty, 3)
+            end
+        end,
+    })
+end
+
+InvTab:CreateSection("💰  Gold Purse")
+
+InvTab:CreateButton({
+    Name        = "💰  Check Gold",
+    Description = "View your current gold balance",
+    Callback    = function()
+        notify("💰 Gold", "You have " .. State.gold .. " gold coins.", 4)
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║         TAB: QUESTS              ║
+-- ╚══════════════════════════════════╝
+
+local QuestTab = Window:CreateTab("Quests", 4483362458)
+
+QuestTab:CreateSection("📜  Quest Journal")
+
+for _, quest in ipairs(QuestLog) do
+    local statusIcon =
+        quest.status == "Completed" and "✅" or
+        quest.status == "Failed"    and "❌" or "🔵"
+
+    QuestTab:CreateButton({
+        Name        = statusIcon .. "  " .. quest.name,
+        Description = "[" .. quest.status .. "]  " .. quest.desc,
+        Callback    = function()
+            if quest.status == "Active" then
+                -- Simulate completing the quest
+                quest.status = "Completed"
+                State.gold   = State.gold + 100
+                gainXP(50)
+                notify(
+                    "✅ Quest Complete!",
+                    quest.name .. "\n+100 Gold  |  +50 XP",
+                    6
+                )
+            else
+                notify(
+                    statusIcon .. "  " .. quest.name,
+                    quest.desc .. "\n\nStatus: " .. quest.status,
+                    5
+                )
+            end
+        end,
+    })
+end
+
+QuestTab:CreateSection("🗺️  New Quest")
+
+QuestTab:CreateInput({
+    Name            = "📝  Quest Name",
+    PlaceholderText = "Enter quest name...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(value)
+        if value ~= "" then
+            table.insert(QuestLog, {
+                name   = value,
+                status = "Active",
+                desc   = "A new adventure awaits.",
+            })
+            notify("📜 Quest Added", value .. " added to your journal!", 4)
+        end
+    end,
+})
+
+-- ╔══════════════════════════════════╗
+-- ║         TAB: SETTINGS            ║
+-- ╚══════════════════════════════════╝
+
+local SetTab = Window:CreateTab("Settings", 4483362458)
+
+SetTab:CreateSection("🔔  Notifications")
+
+SetTab:CreateToggle({
+    Name        = "🔔  Ability Notifications",
+    CurrentValue = true,
+    Flag        = "AbilityNotif",
+    Callback    = function() end,
+})
+
+SetTab:CreateToggle({
+    Name        = "📈  XP Notifications",
+    CurrentValue = true,
+    Flag        = "XPNotif",
+    Callback    = function() end,
+})
+
+SetTab:CreateSection("🎨  Misc")
+
+SetTab:CreateButton({
+    Name        = "ℹ️  About",
+    Description = "LARP System — Built with Rayfield UI",
+    Callback    = function()
+        notify(
+            "⚔️  LARP System",
+            "A full roleplay framework for Roblox.\nBuilt with Rayfield UI Library.\n\nClasses • Stats • Abilities • Quests • Inventory",
+            8
+        )
+    end,
+})
+
+SetTab:CreateButton({
+    Name        = "🔄  Reset Character",
+    Description = "Clear class and reset all stats",
+    Callback    = function()
+        State.class    = nil
+        State.hp       = 100
+        State.mana     = 100
+        State.stamina  = 100
+        State.level    = 1
+        State.xp       = 0
+        State.gold     = 250
+        if Humanoid then
+            Humanoid.MaxHealth = 100
+            Humanoid.Health    = 100
+            Humanoid.WalkSpeed = 16
+        end
+        notify("🔄 Reset", "Character has been reset to default.", 4)
+    end,
+})
+
+-- ============================================================
+--  AUTO STAMINA REGEN (passive)
+-- ============================================================
+
+local regenConn
+regenConn = RunService.Heartbeat:Connect(function(dt)
+    if State.stamina < State.maxStamina and not State.inCombat then
+        State.stamina = math.min(State.maxStamina, State.stamina + dt * 5)
+    end
+    if State.mana < State.maxMana then
+        State.mana = math.min(State.maxMana, State.mana + dt * 2)
+    end
+end)
+
+-- ============================================================
+--  WELCOME NOTIFICATION
+-- ============================================================
+
+task.wait(2)
+notify(
+    "⚔️  LARP System Loaded",
+    "Welcome, adventurer!\nHead to the Character tab to choose your class.",
+    7
+)
